@@ -61,7 +61,9 @@
             }
           ]
         },
-        "options": {}
+        "options": {
+          "timeout": 10000
+        }
       },
       "id": "c196252f-bf0e-4e6c-9281-844024654d38",
       "name": "OpenWeather API",
@@ -72,6 +74,61 @@
         -256
       ],
       "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f8c1a2b3-4d5e-6f70-8192-a3b4c5d6e7f8",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e1a2b3c4-d5e6-7890-abcd-ef1234567890",
+      "name": "Erro de Conexão?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -816,
+        -256
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Captura e Formatação').item.json.chatId }}",
+        "text": "={{ $json.error && ($json.error.message || $json.error.description || '').toString().toLowerCase().includes('timeout') ? '⚠️ A consulta demorou demais. Tente novamente em alguns instantes.' : '⚠️ Não foi possível consultar o clima no momento. Verifique sua conexão ou tente novamente.' }}",
+        "additionalFields": {}
+      },
+      "id": "f2b3c4d5-e6f7-8901-bcde-f12345678901",
+      "name": "Telegram: Erro Rede",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        -528,
+        -400
+      ],
+      "webhookId": "c3d4e5f6-7890-1234-abcd-ef1234567890a",
+      "credentials": {
+        "telegramApi": {
+          "id": "",
+          "name": "TELEGRAM_BOT_TOKEN"
+        }
+      }
     },
     {
       "parameters": {
@@ -131,7 +188,7 @@
         "messages": {
           "values": [
             {
-              "content": "==Você é um assistente meteorológico. Eu tenho os seguintes dados: \nBusca do usuário: {{ $('Telegram Trigger').item.json.message.text }}\nCidade retornada: {{ $('OpenWeather API').item.json.name }}\nEstado: {{ $('Telegram Trigger').item.json.message.text.split(',')[1] ? $('Telegram Trigger').item.json.message.text.split(',')[1].trim() : '' }}\nTemperatura: {{ Math.round($('OpenWeather API').item.json.main.temp) }} graus.\n\nEscreva uma mensagem informando o clima, usando um emoji. Cite a cidade E o estado na resposta (ex: \"Em São Bento (PB), a temperatura é...\").\n\nRetorne o resultado ESTRITAMENTE em formato JSON. \nO JSON deve ter este exato formato:\n{\"message\": \"sua mensagem aqui\", \"ok\": true}"
+              "content": "==Você é um assistente meteorológico. Eu tenho os seguintes dados: \nBusca do usuário: {{ $('Telegram Trigger').item.json.message.text }}\nCidade retornada: {{ $('OpenWeather API').item.json.name }}\nEstado: {{ $('Telegram Trigger').item.json.message.text.split(',')[1] ? $('Telegram Trigger').item.json.message.text.split(',')[1].trim() : '' }}\nTemperatura: {{ Math.round($('OpenWeather API').item.json.main.temp) }} graus.\nSensação térmica: {{ Math.round($('OpenWeather API').item.json.main.feels_like) }} graus.\nUmidade: {{ $('OpenWeather API').item.json.main.humidity }}%.\nCondição: {{ $('OpenWeather API').item.json.weather[0].description }}.\n\nEscreva uma mensagem curta e amigável informando o clima, usando um emoji. Cite a cidade E o estado, inclua temperatura, sensação térmica, umidade e a condição do tempo (ex: \"Em São Bento (PB), a temperatura é...\").\n\nRetorne o resultado ESTRITAMENTE em formato JSON. \nO JSON deve ter este exato formato:\n{\"message\": \"sua mensagem aqui\", \"ok\": true}"
             }
           ]
         },
@@ -150,7 +207,7 @@
       "name": "Message a model",
       "credentials": {
         "googlePalmApi": {
-          "id": "a6eTgXFyCmOGYisb",
+          "id": "",
           "name": "Google Gemini(PaLM) Api account"
         }
       },
@@ -158,7 +215,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst data = $('OpenWeather API').first().json;\nconst cidade = data.name;\nconst temperatura = Math.round(data.main.temp);\n\nconst textoOriginal = $('Telegram Trigger').first().json.message.text;\nconst partesTexto = textoOriginal.split(',');\nconst estadoUF = partesTexto.length > 1 ? partesTexto[1].trim().toUpperCase() : '';\nconst estadoTexto = estadoUF ? ` (${estadoUF})` : '';\n\n\nconst mensagem_fallback = `🌤️ A temperatura em ${cidade}${estadoTexto} é de ${temperatura}°C.`;\n\nreturn {\n  message: mensagem_fallback,\n  ok: true\n};"
+        "jsCode": "\nconst data = $('OpenWeather API').first().json;\nconst cidade = data.name;\nconst temperatura = Math.round(data.main.temp);\nconst sensacao = Math.round(data.main.feels_like);\nconst umidade = data.main.humidity;\nconst descricao = data.weather?.[0]?.description || '';\n\nconst textoOriginal = $('Telegram Trigger').first().json.message.text;\nconst partesTexto = textoOriginal.split(',');\nconst estadoUF = partesTexto.length > 1 ? partesTexto[1].trim().toUpperCase() : '';\nconst estadoTexto = estadoUF ? ` (${estadoUF})` : '';\n\nlet mensagem_fallback = `🌤️ A temperatura em ${cidade}${estadoTexto} é de ${temperatura}°C.`;\nif (descricao) {\n  const descricaoFormatada = descricao.charAt(0).toUpperCase() + descricao.slice(1);\n  mensagem_fallback += ` ${descricaoFormatada}.`;\n}\nmensagem_fallback += ` Sensação térmica: ${sensacao}°C. Umidade: ${umidade}%.`;\n\nreturn {\n  message: mensagem_fallback,\n  ok: true\n};"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -299,6 +356,24 @@
     },
     "OpenWeather API": {
       "main": [
+        [
+          {
+            "node": "Erro de Conexão?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Erro de Conexão?": {
+      "main": [
+        [
+          {
+            "node": "Telegram: Erro Rede",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "Validação de Resposta",
